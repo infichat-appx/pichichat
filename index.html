@@ -120,6 +120,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   <button class="linkbtn" id="toRecover">¿Ya tenías usuario? Recupéralo</button>
 </section>
 
+<section id="noinvite" class="screen" style="justify-content:center;padding-left:24px;padding-right:24px">
+  <div class="brand">Pichi<span>Chat</span></div>
+  <p style="color:var(--muted);margin:14px 0 8px;max-width:32ch">Para entrar necesitas que un amigo te envíe su enlace.</p>
+  <button class="linkbtn" id="toRecover2">¿Ya tenías usuario? Recupéralo</button>
+</section>
+
 <section id="recover" class="screen">
   <div class="brand">Recuperar</div>
   <p style="color:var(--muted);margin:14px 0 24px;max-width:32ch">Escribe tu nombre de usuario y tu código de recuperación.</p>
@@ -368,8 +374,12 @@ async function recoverUser(name, code){
   await kvSet('me', me);
 }
 
-$('#toRecover').onclick = () => { show('recover'); $('#recName').focus(); };
-$('#toSetup').onclick = () => show('setup');
+function goStart(){
+  if (parseLink()?.invite){ show('setup'); $('#nameInput').focus(); }
+  else show('noinvite');
+}
+$('#toRecover').onclick = $('#toRecover2').onclick = () => { show('recover'); $('#recName').focus(); };
+$('#toSetup').onclick = goStart;
 $('#recBtn').onclick = async () => {
   const name = $('#recName').value.trim().toLowerCase().replace(/^@/, '');
   const code = $('#recCode').value;
@@ -454,7 +464,7 @@ onAuthStateChanged(auth, async user => {
     hiddenChats = new Set((await kvGet('hidden').catch(() => null)) || []);
     startList();
   }
-  else { show('setup'); $('#nameInput').focus(); }
+  else goStart();
 });
 
 /* ---------- registro ---------- */
@@ -463,15 +473,20 @@ $('#setupBtn').onclick = async () => {
   const err = $('#setupErr');
   err.textContent = '';
   if (!/^[a-z0-9_]{3,20}$/.test(name)){ err.textContent = 'Usa de 3 a 20 letras, números o guion bajo, sin espacios.'; return; }
+  const link = parseLink();
+  if (!link || !link.invite){ err.textContent = 'Necesitas una invitación para crear tu usuario.'; return; }
   const btn = $('#setupBtn'); btn.disabled = true;
   try {
+    const inv = await getDoc(doc(db, 'invites', link.invite));
+    if (!inv.exists()){ err.textContent = 'Esta invitación ya se usó o no es válida. Pide otra.'; return; }
     const taken = await getDoc(doc(db, 'usernames', name));
     if (taken.exists()){ err.textContent = 'Ese nombre ya está cogido. Prueba otro.'; return; }
     const keys = await genKeys();
     const uid = auth.currentUser.uid;
     const batch = writeBatch(db);
     batch.set(doc(db, 'usernames', name), { uid });
-    batch.set(doc(db, 'users', uid), { username: name, publicKey: JSON.stringify(keys.publicJwk), createdAt: serverTimestamp() });
+    batch.set(doc(db, 'users', uid), { username: name, publicKey: JSON.stringify(keys.publicJwk), createdAt: serverTimestamp(), invite: link.invite });
+    batch.delete(doc(db, 'invites', link.invite));
     await batch.commit();
     me = { uid, username: name, privateKey: keys.privateKey, publicJwk: keys.publicJwk };
     await kvSet('me', me);
@@ -575,12 +590,23 @@ async function startChatWith(other){
 }
 
 /* ---------- enlace de invitación ---------- */
+function parseLink(){
+  const m = location.hash.match(/^#add=([A-Za-z0-9]+)\.([0-9a-f]{16})(?:\.([A-Za-z0-9_-]{20,40}))?$/);
+  return m ? { uid: m[1], fp: m[2], invite: m[3] || null } : null;
+}
+function randomId(){
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 async function fingerprint(jwk){
   const h = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(jwk.x + jwk.y)));
   return [...h.slice(0, 8)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 $('#shareBtn').onclick = async () => {
-  const url = location.origin + location.pathname + '#add=' + me.uid + '.' + await fingerprint(me.publicJwk);
+  const inviteId = randomId();
+  try { await setDoc(doc(db, 'invites', inviteId), { by: me.uid, createdAt: serverTimestamp() }); }
+  catch (e){ toast(rulesHint(e) || 'No se pudo crear la invitación.'); return; }
+  const url = location.origin + location.pathname + '#add=' + me.uid + '.' + await fingerprint(me.publicJwk) + '.' + inviteId;
   if (navigator.share){
     try { await navigator.share({ title: 'PichiChat', text: 'Agrégame en PichiChat (@' + me.username + '):', url }); } catch {}
   } else {
@@ -590,10 +616,10 @@ $('#shareBtn').onclick = async () => {
 };
 async function handleInvite(){
   if (!me) return;
-  const m = location.hash.match(/^#add=([A-Za-z0-9]+)\.([0-9a-f]{16})$/);
-  if (!m) return;
+  const link = parseLink();
+  if (!link) return;
   history.replaceState(null, '', location.pathname + location.search);
-  const [, uid, fp] = m;
+  const { uid, fp } = link;
   if (uid === me.uid){ toast('Este es tu propio enlace. Envíaselo a un amigo.'); return; }
   try {
     const u = await getUser(uid);
