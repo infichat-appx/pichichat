@@ -158,7 +158,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5" stroke-linecap="round"/></svg>
     </button>
   </header>
-  <div class="notice">Lo que recibes se borra del servidor al verlo y desaparece al salir del chat.</div>
+  <div class="notice">Lo que envías desaparece de tu pantalla al instante. Lo que recibes se borra al verlo y desaparece al salir del chat.</div>
   <div id="msgs"></div>
   <div class="composer" id="composer">
     <button class="iconbtn" id="photoBtn" aria-label="Enviar foto">
@@ -510,7 +510,7 @@ function renderList(){
     b.innerHTML = '<span class="avatar"></span><span class="cname"><span class="nm"></span><span class="csub"></span></span>';
     b.querySelector('.avatar').textContent = c.name[0].toUpperCase();
     b.querySelector('.nm').textContent = '@' + c.name;
-    b.querySelector('.csub').textContent = n ? 'Mensajes sin leer' : 'Esperando a que lo lea';
+    b.querySelector('.csub').textContent = n ? 'Mensajes sin leer' : '';
     if (n){ const s = document.createElement('span'); s.className = 'badge'; s.textContent = n; b.append(s); }
     b.onclick = () => openChat(c.id, c.other);
     li.append(b); ul.append(li);
@@ -594,13 +594,6 @@ async function openChat(id, other){
   c.unsubIn = onSnapshot(query(col, where('to', '==', me.uid)), snap => {
     snap.docChanges().forEach(ch => { if (ch.type === 'added') receive(c, ch.doc); });
   }, e => toast(rulesHint(e) || 'Error recibiendo mensajes.'));
-  c.unsubOut = onSnapshot(query(col, where('from', '==', me.uid)), { includeMetadataChanges: true }, snap => {
-    snap.docChanges().forEach(ch => {
-      if (ch.type === 'added') outgoing(c, ch.doc);
-      else if (ch.type === 'modified') setStatus(c, ch.doc.id, ch.doc.metadata.hasPendingWrites ? 'Enviando…' : 'Enviado');
-      else if (ch.type === 'removed') markRead(c, ch.doc.id);
-    });
-  }, () => {});
 }
 
 function closeChat(){
@@ -741,9 +734,11 @@ async function send(type, bytes, mime){
   if (ct.length > MAX_BYTES){ toast('Es demasiado grande para enviarlo.'); return; }
   const data = { from: me.uid, to: c.other, type, iv: Bytes.fromUint8Array(iv), ct: Bytes.fromUint8Array(ct), createdAt: serverTimestamp() };
   if (mime) data.mime = mime;
+  if (type !== 'text') toast('Enviando…');
   try {
     await setDoc(doc(db, 'chats', c.id), { members: [me.uid, c.other].sort(), updatedAt: serverTimestamp() });
     await addDoc(collection(db, 'chats', c.id, 'messages'), data);
+    toast('Enviado ✓');
   } catch (e){ toast(rulesHint(e) || 'No se pudo enviar el mensaje.'); }
 }
 
