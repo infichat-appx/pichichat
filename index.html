@@ -64,6 +64,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .csub{display:block;font-weight:400;font-size:14px;color:var(--muted)}
 .badge{background:var(--coral);color:var(--deep);font-weight:700;font-size:13px;border-radius:99px;padding:2px 9px}
 .empty{padding:48px 28px;color:var(--muted);text-align:center}
+#blockedList li{display:flex;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid var(--line)}
+#blockedList .avatar{width:38px;height:38px;font-size:15px}
+#blockedList .bname{flex:1;font-weight:600}
+#blockedList button{color:var(--lilac);font-weight:600}
+#blockedList .none{color:var(--muted);padding:16px 2px;justify-content:center}
 .empty strong{display:block;color:var(--text);font-family:var(--display);font-size:22px;margin-bottom:8px}
 
 /* Chat */
@@ -189,6 +194,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     </button>
     <span class="avatar" id="chatAvatar" style="width:38px;height:38px;font-size:16px"></span>
     <span id="chatName"></span>
+    <button class="iconbtn" id="blockBtn" aria-label="Bloquear">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8" stroke-linecap="round"/></svg>
+    </button>
     <button class="iconbtn" id="panicBtn" aria-label="Borrar para todos" style="color:var(--coral)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l1.8 5.2L19 4.5l-2 5.3 5 1.7-5 2 2.3 5.2-5.3-2.3L12 22l-1.9-5.6-5.4 2.3L7 13.5 2 11.5l5-1.7-2-5.3 5.2 2.7z"/></svg>
     </button>
@@ -248,7 +256,17 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     <div class="recode" id="backupCode" hidden></div>
     <div class="err" id="backupErr"></div>
     <button class="primary" id="backupGo">Crear código</button>
+    <button class="ghost" id="openBlockedBtn">Ver bloqueados</button>
     <button class="ghost" id="logoutBtn" style="color:var(--coral)" hidden>Cerrar sesión</button>
+    <button class="ghost" data-close>Cerrar</button>
+  </div>
+</div>
+
+<div class="modal" id="blockedModal">
+  <div class="sheet">
+    <h2>Bloqueados</h2>
+    <p>No recibes mensajes de estas personas. Toca para desbloquear.</p>
+    <ul id="blockedList" style="list-style:none;max-height:50vh;overflow-y:auto"></ul>
     <button class="ghost" data-close>Cerrar</button>
   </div>
 </div>
@@ -452,7 +470,24 @@ function openBackup(){
   $('#backupModal').classList.add('on');
 }
 $('#myName').onclick = openBackup;
+async function openBlocked(){
+  const ul = $('#blockedList');
+  ul.innerHTML = '';
+  if (!blocked.size){ ul.innerHTML = '<li class="none">No has bloqueado a nadie.</li>'; }
+  else for (const uid of blocked){
+    const u = await getUser(uid).catch(() => null);
+    const name = u ? u.username : '???';
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="avatar"></span><span class="bname"></span><button>Desbloquear</button>';
+    const av = li.querySelector('.avatar'); av.textContent = name[0].toUpperCase(); av.style.background = avatarColor(name);
+    li.querySelector('.bname').textContent = '@' + name;
+    li.querySelector('button').onclick = () => { blocked.delete(uid); saveBlocked(); openBlocked(); renderList(); toast('Desbloqueado'); };
+    ul.append(li);
+  }
+  $('#blockedModal').classList.add('on');
+}
 $('#backupBanner').onclick = openBackup;
+$('#openBlockedBtn').onclick = () => { $('#backupModal').classList.remove('on'); openBlocked(); };
 $('#backupGo').onclick = async () => {
   const btn = $('#backupGo'); btn.disabled = true; btn.textContent = 'Creando…';
   $('#backupErr').textContent = '';
@@ -477,6 +512,7 @@ $('#logoutBtn').onclick = async () => {
   try {
     await kvDel('me');
     await kvDel('hidden');
+    await kvDel('blocked');
     await signOut(auth);
   } catch {}
   location.replace(location.pathname);
@@ -508,6 +544,7 @@ onAuthStateChanged(auth, async user => {
   if (saved && saved.uid === user.uid){
     me = saved;
     hiddenChats = new Set((await kvGet('hidden').catch(() => null)) || []);
+    blocked = new Set((await kvGet('blocked').catch(() => null)) || []);
     startList();
   }
   else goStart();
@@ -547,6 +584,8 @@ $('#nameInput').onkeydown = e => { if (e.key === 'Enter') $('#setupBtn').click()
 let chats = [];
 const counts = new Map();
 let hiddenChats = new Set();
+let blocked = new Set();
+function saveBlocked(){ kvSet('blocked', [...blocked]).catch(() => {}); }
 function saveHidden(){ kvSet('hidden', [...hiddenChats]).catch(() => {}); }
 const unreadSubs = new Map();
 let listSub = null;
@@ -595,7 +634,7 @@ function avatarColor(name){
 function renderList(){
   const ul = $('#chatList');
   ul.innerHTML = '';
-  const visible = chats.filter(c => { const n = counts.get(c.id); return n && (n.in > 0 || (n.out > 0 && !hiddenChats.has(c.id))); });
+  const visible = chats.filter(c => { if (blocked.has(c.other)) return false; const n = counts.get(c.id); return n && (n.in > 0 || (n.out > 0 && !hiddenChats.has(c.id))); });
   if (!visible.length){
     ul.innerHTML = '<li class="empty"><strong>No hay chats</strong>Comparte tu enlace o toca + para escribir a alguien.</li>';
     return;
@@ -759,6 +798,15 @@ $('#delBtn').onclick = async () => {
 };
 
 // Pánico: borra todo lo pendiente en los dos lados y el chat desaparece para los dos
+$('#blockBtn').onclick = async () => {
+  const c = cur;
+  if (!c) return;
+  if (!confirm('¿Bloquear a @' + c.name + '? Dejarás de recibir sus mensajes.')) return;
+  blocked.add(c.other); saveBlocked();
+  toast('@' + c.name + ' bloqueado');
+  history.back();
+};
+
 $('#panicBtn').onclick = async () => {
   const c = cur;
   if (!c) return;
@@ -789,6 +837,7 @@ async function receive(c, d){
   if (c.seen.has(d.id)) return;
   c.seen.add(d.id);
   const m = d.data({ serverTimestamps: 'estimate' });
+  if (blocked.has(m.from)) return; // bloqueado: no lo recibimos ni lo borramos
   const item = { id: d.id, mine: false, type: m.type, t: m.createdAt ? m.createdAt.toMillis() : Date.now() };
   try { Object.assign(item, await decode(c, m)); } catch { item.type = 'bad'; }
   if (cur !== c){ if (item.url) URL.revokeObjectURL(item.url); return; } // saliste antes de verlo: se queda sin leer
