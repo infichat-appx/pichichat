@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PichiChat">
+<meta name="theme-color" content="#171A33">
+<title>PichiChat</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%91%BB%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --night:#171A33; --deep:#10122A; --surface:#232750; --line:#353A6B;
+  --text:#F2F0FF; --muted:#9AA0C8; --lilac:#B9A7FF; --lilac-ink:#1E1640; --coral:#FF8A7A;
+  --display:"Bricolage Grotesque", ui-rounded, system-ui, sans-serif;
+  --body:system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--night);color:var(--text);font:16px/1.4 var(--body);-webkit-tap-highlight-color:transparent}
+body{overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--lilac);outline-offset:2px}
+.screen{position:fixed;inset:0;display:none;flex-direction:column;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.screen.on{display:flex}
+
+/* Carga y registro */
+#loading{align-items:center;justify-content:center;color:var(--muted)}
+#setup{justify-content:center;padding-left:24px;padding-right:24px}
+.brand{font-family:var(--display);font-weight:800;font-size:44px;line-height:1;letter-spacing:-.02em}
+.brand span{display:inline-block;transform:rotate(-8deg)}
+#setup p{color:var(--muted);margin:14px 0 28px;max-width:32ch}
+.field{display:flex;align-items:center;background:var(--surface);border-radius:14px;padding:0 14px}
+.field b{color:var(--muted);font-weight:500}
+.field input{flex:1;background:none;border:0;color:var(--text);font-size:18px;padding:15px 6px;outline:none}
+.primary{margin-top:14px;width:100%;background:var(--lilac);color:var(--lilac-ink);font-weight:700;border-radius:14px;padding:15px}
+.primary:disabled{opacity:.5}
+.hint{font-size:13px;color:var(--muted);margin-top:18px;max-width:36ch}
+.err{color:var(--coral);font-size:14px;margin-top:10px;min-height:1.2em}
+
+/* Lista de chats */
+.top{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.top .brand{font-size:26px;flex:1}
+.me{color:var(--muted);font-size:14px}
+.iconbtn{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;flex:none}
+.iconbtn svg{width:22px;height:22px}
+.iconbtn.fill{background:var(--lilac);color:var(--lilac-ink)}
+#chatList{flex:1;overflow-y:auto;list-style:none}
+#chatList li button{width:100%;display:flex;align-items:center;gap:14px;padding:14px 16px;text-align:left;border-bottom:1px solid var(--line)}
+.avatar{width:46px;height:46px;border-radius:50%;background:var(--surface);display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:20px;color:var(--lilac);flex:none}
+.cname{flex:1;font-weight:600}
+.csub{display:block;font-weight:400;font-size:14px;color:var(--muted)}
+.badge{background:var(--coral);color:var(--deep);font-weight:700;font-size:13px;border-radius:99px;padding:2px 9px}
+.empty{padding:48px 28px;color:var(--muted);text-align:center}
+.empty strong{display:block;color:var(--text);font-family:var(--display);font-size:22px;margin-bottom:8px}
+
+/* Chat */
+#chat .top{gap:6px;padding:10px 10px}
+#chatName{flex:1;font-weight:700;font-size:17px}
+.notice{text-align:center;font-size:12.5px;color:var(--muted);padding:10px 20px 4px}
+#msgs{flex:1;overflow-y:auto;padding:10px 12px 16px;display:flex;flex-direction:column;gap:6px}
+.msg{max-width:78%;display:flex;flex-direction:column;align-items:flex-start}
+.msg.mine{align-self:flex-end;align-items:flex-end}
+.bubble{background:var(--surface);border-radius:18px 18px 18px 6px;padding:9px 13px;white-space:pre-wrap;word-break:break-word}
+.mine .bubble{background:var(--lilac);color:var(--lilac-ink);border-radius:18px 18px 6px 18px}
+.bubble.media{padding:4px;overflow:hidden}
+.bubble img{display:block;max-width:100%;max-height:340px;border-radius:14px;cursor:zoom-in}
+.bubble audio{display:block;width:240px;max-width:100%}
+.meta{font-size:11.5px;color:var(--muted);margin:2px 6px 0}
+.msg.read .bubble{animation:vanish 1.6s ease forwards}
+@keyframes vanish{to{opacity:.35;filter:blur(3px)}}
+.msg.bad .bubble{background:transparent;border:1px dashed var(--coral);color:var(--coral)}
+@media (prefers-reduced-motion:reduce){.msg.read .bubble{animation:none;opacity:.4}}
+
+.composer{display:flex;align-items:flex-end;gap:6px;padding:8px 8px;border-top:1px solid var(--line);background:var(--deep)}
+#text{flex:1;resize:none;background:var(--surface);border:0;color:var(--text);border-radius:20px;padding:10px 14px;font:16px/1.35 var(--body);max-height:120px;outline:none}
+.rec{flex:1;display:none;align-items:center;gap:10px;padding:0 10px;height:42px;color:var(--coral);font-variant-numeric:tabular-nums}
+.rec i{width:10px;height:10px;border-radius:50%;background:var(--coral);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.composer.recording #text,.composer.recording #photoBtn{display:none}
+.composer.recording .rec{display:flex}
+
+/* Modales */
+.modal{position:fixed;inset:0;background:rgba(10,11,28,.8);display:none;align-items:flex-end;justify-content:center;z-index:10}
+.modal.on{display:flex}
+.sheet{background:var(--night);width:100%;max-width:480px;border-radius:22px 22px 0 0;padding:22px 20px calc(22px + env(safe-area-inset-bottom,0px))}
+.sheet h2{font-family:var(--display);font-weight:800;font-size:24px;margin-bottom:6px}
+.sheet p{color:var(--muted);font-size:14.5px;margin-bottom:16px}
+.code{font-family:var(--display);font-size:30px;font-weight:800;letter-spacing:.04em;text-align:center;padding:18px 0;color:var(--lilac)}
+.ghost{width:100%;padding:13px;margin-top:8px;color:var(--muted)}
+#viewer{position:fixed;inset:0;background:#000;display:none;align-items:center;justify-content:center;z-index:20}
+#viewer.on{display:flex}
+#viewer img{max-width:100%;max-height:100%}
+.linkbtn{color:var(--lilac);font-weight:600;margin-top:22px;text-align:left;padding:4px 0}
+.banner{display:block;width:100%;text-align:left;background:var(--surface);color:var(--text);padding:12px 16px;font-size:14px;border-bottom:1px solid var(--line)}
+.banner b{color:var(--lilac)}
+.me{cursor:pointer}
+.field + .field{margin-top:10px}
+.recode{font-family:var(--display);font-size:24px;font-weight:800;letter-spacing:.03em;text-align:center;padding:16px 8px;color:var(--lilac);word-break:break-all;user-select:all;-webkit-user-select:all}
+#toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--text);color:var(--deep);padding:10px 16px;border-radius:12px;font-size:14px;display:none;z-index:30;max-width:90vw;text-align:center}
+#toast.on{display:block}
+</style>
+</head>
+<body>
+
+<section id="loading" class="screen on">Conectando…</section>
+
+<section id="setup" class="screen">
+  <div class="brand">Pichi<span>Chat</span></div>
+  <p>Mensajes cifrados que se borran en cuanto tu amigo los lee.</p>
+  <div class="field"><b>@</b><input id="nameInput" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="tu_nombre"></div>
+  <div class="err" id="setupErr"></div>
+  <button class="primary" id="setupBtn">Crear mi usuario</button>
+  <p class="hint">Letras, números y guion bajo (3 a 20). Si vas a añadir la app a la pantalla de inicio, hazlo antes de crear tu usuario.</p>
+  <button class="linkbtn" id="toRecover">¿Ya tenías usuario? Recupéralo</button>
+</section>
+
+<section id="recover" class="screen">
+  <div class="brand">Recuperar</div>
+  <p style="color:var(--muted);margin:14px 0 24px;max-width:32ch">Escribe tu nombre de usuario y tu código de recuperación.</p>
+  <div class="field"><b>@</b><input id="recName" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="tu_nombre"></div>
+  <div class="field"><input id="recCode" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"></div>
+  <div class="err" id="recErr"></div>
+  <button class="primary" id="recBtn">Recuperar mi usuario</button>
+  <button class="linkbtn" id="toSetup">Crear un usuario nuevo</button>
+</section>
+
+<section id="list" class="screen">
+  <header class="top">
+    <div class="brand">Pichi<span>Chat</span></div>
+    <button class="me" id="myName" aria-label="Mi usuario y código de recuperación"></button>
+    <button class="iconbtn" id="shareBtn" aria-label="Compartir mi enlace">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>
+    </button>
+    <button class="iconbtn fill" id="addBtn" aria-label="Añadir amigo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </header>
+  <button class="banner" id="backupBanner" hidden>Protege tu usuario: <b>crea tu código de recuperación</b> por si cambias de móvil.</button>
+  <ul id="chatList"></ul>
+</section>
+
+<section id="chat" class="screen">
+  <header class="top">
+    <button class="iconbtn" id="backBtn" aria-label="Volver">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <span id="chatName"></span>
+    <button class="iconbtn" id="delBtn" aria-label="Borrar chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>
+    </button>
+    <button class="iconbtn" id="codeBtn" aria-label="Código de seguridad">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5" stroke-linecap="round"/></svg>
+    </button>
+  </header>
+  <div class="notice">Lo que envías desaparece de tu pantalla al instante. Lo que recibes se borra al verlo y desaparece al salir del chat.</div>
+  <div id="msgs"></div>
+  <div class="composer" id="composer">
+    <button class="iconbtn" id="photoBtn" aria-label="Enviar foto">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M9 6l1.5-2h3L15 6"/></svg>
+    </button>
+    <input type="file" id="photoInput" accept="image/*" hidden>
+    <textarea id="text" rows="1" maxlength="4000" placeholder="Mensaje"></textarea>
+    <div class="rec"><i></i><span id="recTime">0:00</span><span style="flex:1"></span></div>
+    <button class="iconbtn" id="cancelRecBtn" aria-label="Cancelar audio" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <button class="iconbtn fill" id="actionBtn" aria-label="Grabar audio"></button>
+  </div>
+</section>
+
+<div class="modal" id="addModal">
+  <div class="sheet">
+    <h2>Añadir amigo</h2>
+    <p>Escribe su nombre de usuario exacto.</p>
+    <div class="field"><b>@</b><input id="friendInput" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="nombre_amigo"></div>
+    <div class="err" id="addErr"></div>
+    <button class="primary" id="addGo">Abrir chat</button>
+    <button class="ghost" data-close>Cancelar</button>
+  </div>
+</div>
+
+<div class="modal" id="codeModal">
+  <div class="sheet">
+    <h2>Código de seguridad</h2>
+    <p id="codeText"></p>
+    <div class="code" id="codeValue"></div>
+    <button class="ghost" data-close>Cerrar</button>
+  </div>
+</div>
+
+<div class="modal" id="backupModal">
+  <div class="sheet">
+    <h2>Código de recuperación</h2>
+    <p id="backupText"></p>
+    <div class="field" id="oldCodeWrap" hidden><input id="oldCode" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="Tu código actual"></div>
+    <div class="recode" id="backupCode" hidden></div>
+    <div class="err" id="backupErr"></div>
+    <button class="primary" id="backupGo">Crear código</button>
+    <button class="ghost" id="logoutBtn" style="color:var(--coral)" hidden>Cerrar sesión</button>
+    <button class="ghost" data-close>Cerrar</button>
+  </div>
+</div>
+
+<div id="viewer"><img alt=""></div>
+<div id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, EmailAuthProvider, linkWithCredential,
+  signInWithEmailAndPassword, updatePassword, reauthenticateWithCredential, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, collection, query, where,
+  onSnapshot, addDoc, deleteDoc, serverTimestamp, Bytes } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCD4E1A59Ny_CuM9mJzIqyQLU2TVCvFfNI",
+  authDomain: "pichichat.firebaseapp.com",
+  projectId: "pichichat",
+  storageBucket: "pichichat.firebasestorage.app",
+  messagingSenderId: "310244547617",
+  appId: "1:310244547617:web:89cad564c0949dee47d760"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const $ = s => document.querySelector(s);
+const enc = new TextEncoder(), dec = new TextDecoder();
+const MAX_BYTES = 900000;       // límite por mensaje cifrado (Firestore admite 1 MiB por documento)
+const MAX_AUDIO_S = 60;
+
+/* ---------- utilidades de interfaz ---------- */
+function show(id){ document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id)); }
+let toastT;
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 3500); }
+function rulesHint(e){ return e && e.code === 'permission-denied' ? 'Permiso denegado: revisa que las reglas de Firestore estén publicadas.' : null; }
+document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => b.closest('.modal').classList.remove('on'));
+document.querySelectorAll('.modal').forEach(m => m.onclick = e => { if (e.target === m) m.classList.remove('on'); });
+$('#viewer').onclick = () => $('#viewer').classList.remove('on');
+
+/* ---------- almacenamiento local (IndexedDB) ---------- */
+let idbP;
+function idb(){ return idbP ||= new Promise((res, rej) => {
+  const r = indexedDB.open('pichichat', 1);
+  r.onupgradeneeded = () => r.result.createObjectStore('kv');
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+}); }
+async function kvGet(k){ const d = await idb(); return new Promise((res, rej) => { const r = d.transaction('kv').objectStore('kv').get(k); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+async function kvDel(k){ const d = await idb(); return new Promise((res, rej) => { const tx = d.transaction('kv', 'readwrite'); tx.objectStore('kv').delete(k); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
+async function kvSet(k, v){ const d = await idb(); return new Promise((res, rej) => { const tx = d.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
+
+/* ---------- cifrado ---------- */
+async function genKeys(){
+  const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const j = await crypto.subtle.exportKey('jwk', kp.publicKey);
+  return { privateKey: kp.privateKey, publicJwk: { kty: j.kty, crv: j.crv, x: j.x, y: j.y } };
+}
+const keyCache = new Map();
+async function chatKey(chatId, friendJwk){
+  if (keyCache.has(chatId)) return keyCache.get(chatId);
+  const pub = await crypto.subtle.importKey('jwk', { ...friendJwk, ext: true }, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const bits = await crypto.subtle.deriveBits({ name: 'ECDH', public: pub }, me.privateKey, 256);
+  const hk = await crypto.subtle.importKey('raw', bits, 'HKDF', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    { name: 'HKDF', hash: 'SHA-256', salt: enc.encode(chatId), info: enc.encode('pichichat-v1') },
+    hk, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  keyCache.set(chatId, key);
+  return key;
+}
+async function seal(key, bytes){
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes));
+  return { iv, ct };
+}
+async function unseal(key, iv, ct){
+  return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv.toUint8Array() }, key, ct.toUint8Array()));
+}
+async function safetyCode(a, b){
+  const s = [a.x + a.y, b.x + b.y].sort().join('|');
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(s)));
+  const parts = [];
+  for (let i = 0; i < 5; i++) parts.push(String(((h[i * 2] << 8) | h[i * 2 + 1]) % 10000).padStart(4, '0'));
+  return parts.join(' ');
+}
+
+/* ---------- código de recuperación ---------- */
+const CODE_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const emailFor = u => u + '@pichichat.firebaseapp.com';
+function genCode(){
+  const r = crypto.getRandomValues(new Uint8Array(20));
+  let s = '';
+  for (let i = 0; i < 20; i++){ s += CODE_ABC[r[i] & 31]; if (i % 4 === 3 && i < 19) s += '-'; }
+  return s;
+}
+// Del código salen dos secretos: la contraseña que ve Firebase y la llave de tu caja fuerte (que nunca sale del móvil)
+async function codeSecrets(username, code){
+  const norm = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const base = await crypto.subtle.importKey('raw', enc.encode(norm), 'PBKDF2', false, ['deriveBits']);
+  const bits = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode('pichichat-recovery:' + username), iterations: 150000 }, base, 512));
+  const password = [...bits.slice(0, 32)].map(b => b.toString(16).padStart(2, '0')).join('');
+  const vaultKey = await crypto.subtle.importKey('raw', bits.slice(32), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  return { password, vaultKey };
+}
+function authMsg(e){
+  const c = e && e.code || '';
+  if (c === 'app/need-old') return 'Escribe tu código actual (20 caracteres) para crear uno nuevo.';
+  if (c === 'app/bad-old') return 'El código actual no es correcto.';
+  if (c === 'auth/operation-not-allowed') return 'Falta activar "Correo electrónico/contraseña" en Firebase Authentication.';
+  if (c === 'auth/invalid-credential' || c === 'auth/wrong-password' || c === 'auth/user-not-found' || c === 'auth/invalid-login-credentials') return 'Usuario o código incorrecto.';
+  if (c === 'auth/too-many-requests') return 'Demasiados intentos. Espera unos minutos.';
+  if (c === 'auth/network-request-failed') return 'Sin conexión. Inténtalo de nuevo.';
+  return rulesHint(e);
+}
+
+async function createBackup(oldCode){
+  const user = auth.currentUser;
+  const email = emailFor(me.username);
+  const linked = !user.isAnonymous;
+  if (linked){
+    // para crear un código nuevo hay que demostrar que conoces el actual
+    if (!oldCode || oldCode.replace(/[^A-Za-z0-9]/g, '').length !== 20) throw { code: 'app/need-old' };
+    const o = await codeSecrets(me.username, oldCode);
+    try { await reauthenticateWithCredential(user, EmailAuthProvider.credential(email, o.password)); }
+    catch (e){ throw { code: 'app/bad-old' }; }
+  }
+  let jwkPriv;
+  try { jwkPriv = await crypto.subtle.exportKey('jwk', me.privateKey); }
+  catch {
+    // usuarios antiguos: su clave no se podía copiar, así que se crea una nueva
+    const keys = await genKeys();
+    await updateDoc(doc(db, 'users', me.uid), { publicKey: JSON.stringify(keys.publicJwk) });
+    me.privateKey = keys.privateKey; me.publicJwk = keys.publicJwk;
+    keyCache.clear();
+    await kvSet('me', me);
+    jwkPriv = await crypto.subtle.exportKey('jwk', me.privateKey);
+  }
+  const code = genCode();
+  const { password, vaultKey } = await codeSecrets(me.username, code);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, vaultKey, enc.encode(JSON.stringify(jwkPriv))));
+  if (linked) await updatePassword(user, password);
+  else await linkWithCredential(user, EmailAuthProvider.credential(email, password));
+  await setDoc(doc(db, 'vault', me.uid), { iv: Bytes.fromUint8Array(iv), ct: Bytes.fromUint8Array(ct) });
+  me.backedUp = true;
+  await kvSet('me', me);
+  return code;
+}
+
+async function recoverUser(name, code){
+  const { password, vaultKey } = await codeSecrets(name, code);
+  const cred = await signInWithEmailAndPassword(auth, emailFor(name), password);
+  const uid = cred.user.uid;
+  const [u, v] = await Promise.all([getDoc(doc(db, 'users', uid)), getDoc(doc(db, 'vault', uid))]);
+  if (!u.exists() || !v.exists()) throw new Error('novault');
+  const d = v.data();
+  const raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: d.iv.toUint8Array() }, vaultKey, d.ct.toUint8Array());
+  const jwk = JSON.parse(dec.decode(raw));
+  const privateKey = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  me = { uid, username: u.data().username, privateKey, publicJwk: JSON.parse(u.data().publicKey), backedUp: true };
+  await kvSet('me', me);
+}
+
+$('#toRecover').onclick = () => { show('recover'); $('#recName').focus(); };
+$('#toSetup').onclick = () => show('setup');
+$('#recBtn').onclick = async () => {
+  const name = $('#recName').value.trim().toLowerCase().replace(/^@/, '');
+  const code = $('#recCode').value;
+  const err = $('#recErr');
+  err.textContent = '';
+  if (!/^[a-z0-9_]{3,20}$/.test(name) || code.replace(/[^A-Za-z0-9]/g, '').length !== 20){ err.textContent = 'Revisa el nombre y el código (20 caracteres).'; return; }
+  const btn = $('#recBtn'); btn.disabled = true; btn.textContent = 'Recuperando…';
+  try { await recoverUser(name, code); startList(); }
+  catch (e){ err.textContent = authMsg(e) || 'No se pudo recuperar. Revisa el código.'; }
+  finally { btn.disabled = false; btn.textContent = 'Recuperar mi usuario'; }
+};
+
+function openBackup(){
+  $('#backupErr').textContent = '';
+  $('#backupCode').hidden = true;
+  $('#backupGo').hidden = false;
+  $('#oldCode').value = '';
+  $('#oldCodeWrap').hidden = auth.currentUser.isAnonymous;
+  $('#backupText').textContent = me.backedUp
+    ? 'Ya tienes un código de recuperación. Para crear uno nuevo, escribe el actual: el anterior dejará de valer.'
+    : 'Con tu nombre (@' + me.username + ') y este código podrás recuperar tu usuario en otro móvil o navegador. Anótalo fuera del móvil: quien lo tenga puede entrar como tú.';
+  $('#backupGo').textContent = me.backedUp ? 'Crear código nuevo' : 'Crear código';
+  $('#logoutBtn').hidden = !me.backedUp;
+  $('#backupModal').classList.add('on');
+}
+$('#myName').onclick = openBackup;
+$('#backupBanner').onclick = openBackup;
+$('#backupGo').onclick = async () => {
+  const btn = $('#backupGo'); btn.disabled = true; btn.textContent = 'Creando…';
+  $('#backupErr').textContent = '';
+  try {
+    const code = await createBackup($('#oldCode').value);
+    $('#oldCodeWrap').hidden = true;
+    $('#backupText').textContent = 'Anótalo ahora: no se volverá a mostrar. Para recuperar tu usuario necesitarás @' + me.username + ' y este código.';
+    $('#backupCode').textContent = code;
+    $('#backupCode').hidden = false;
+    btn.hidden = true;
+    $('#backupBanner').hidden = true;
+    $('#logoutBtn').hidden = false;
+  } catch (e){
+    $('#backupErr').textContent = authMsg(e) || 'No se pudo crear el código. Inténtalo de nuevo.';
+    btn.textContent = me.backedUp ? 'Crear código nuevo' : 'Crear código';
+  } finally { btn.disabled = false; }
+};
+
+$('#logoutBtn').onclick = async () => {
+  if (!me || !me.backedUp) return;
+  if (!confirm('¿Cerrar sesión? Para volver a entrar como @' + me.username + ' necesitarás tu código de recuperación.')) return;
+  try {
+    await kvDel('me');
+    await signOut(auth);
+  } catch {}
+  location.replace(location.pathname);
+};
+
+/* ---------- usuarios ---------- */
+let me = null;
+const users = new Map();
+async function getUser(uid){
+  if (users.has(uid)) return users.get(uid);
+  const s = await getDoc(doc(db, 'users', uid));
+  if (!s.exists()) return null;
+  const u = { username: s.data().username, pub: JSON.parse(s.data().publicKey) };
+  users.set(uid, u);
+  return u;
+}
+
+/* ---------- arranque ---------- */
+let booted = false;
+onAuthStateChanged(auth, async user => {
+  if (!user){
+    try { await signInAnonymously(auth); }
+    catch (e){ $('#loading').textContent = 'No se pudo conectar. Revisa que el acceso Anónimo esté activado en Firebase.'; }
+    return;
+  }
+  if (booted) return;
+  booted = true;
+  const saved = await kvGet('me');
+  if (saved && saved.uid === user.uid){ me = saved; startList(); }
+  else { show('setup'); $('#nameInput').focus(); }
+});
+
+/* ---------- registro ---------- */
+$('#setupBtn').onclick = async () => {
+  const name = $('#nameInput').value.trim().toLowerCase();
+  const err = $('#setupErr');
+  err.textContent = '';
+  if (!/^[a-z0-9_]{3,20}$/.test(name)){ err.textContent = 'Usa de 3 a 20 letras, números o guion bajo, sin espacios.'; return; }
+  const btn = $('#setupBtn'); btn.disabled = true;
+  try {
+    const taken = await getDoc(doc(db, 'usernames', name));
+    if (taken.exists()){ err.textContent = 'Ese nombre ya está cogido. Prueba otro.'; return; }
+    const keys = await genKeys();
+    const uid = auth.currentUser.uid;
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'usernames', name), { uid });
+    batch.set(doc(db, 'users', uid), { username: name, publicKey: JSON.stringify(keys.publicJwk), createdAt: serverTimestamp() });
+    await batch.commit();
+    me = { uid, username: name, privateKey: keys.privateKey, publicJwk: keys.publicJwk };
+    await kvSet('me', me);
+    startList();
+  } catch (e){
+    err.textContent = rulesHint(e) || 'No se pudo crear el usuario. Inténtalo de nuevo.';
+  } finally { btn.disabled = false; }
+};
+$('#nameInput').onkeydown = e => { if (e.key === 'Enter') $('#setupBtn').click(); };
+
+/* ---------- lista de chats ---------- */
+let chats = [];
+const counts = new Map();
+const unreadSubs = new Map();
+let listSub = null;
+
+function startList(){
+  show('list');
+  $('#myName').textContent = '@' + me.username;
+  $('#backupBanner').hidden = !!me.backedUp;
+  renderList();
+  handleInvite();
+  if (listSub) return;
+  const q = query(collection(db, 'chats'), where('members', 'array-contains', me.uid));
+  listSub = onSnapshot(q, async snap => {
+    const out = [];
+    for (const d of snap.docs){
+      const data = d.data({ serverTimestamps: 'estimate' });
+      const other = data.members.find(m => m !== me.uid);
+      const u = await getUser(other);
+      if (!u) continue;
+      out.push({ id: d.id, other, name: u.username, t: data.updatedAt ? data.updatedAt.toMillis() : 0 });
+      watchCounts(d.id);
+    }
+    chats = out.sort((a, b) => b.t - a.t);
+    renderList();
+  }, e => toast(rulesHint(e) || 'Error cargando los chats.'));
+}
+function watchCounts(chatId){
+  if (unreadSubs.has(chatId)) return;
+  const col = collection(db, 'chats', chatId, 'messages');
+  const set = (k, n) => { const c = counts.get(chatId) || { in: 0, out: 0 }; c[k] = n; counts.set(chatId, c); renderList(); };
+  unreadSubs.set(chatId, [
+    onSnapshot(query(col, where('to', '==', me.uid)), s => set('in', s.size), () => {}),
+    onSnapshot(query(col, where('from', '==', me.uid)), s => set('out', s.size), () => {})
+  ]);
+}
+function renderList(){
+  const ul = $('#chatList');
+  ul.innerHTML = '';
+  const visible = chats.filter(c => { const n = counts.get(c.id); return n && n.in + n.out > 0; });
+  if (!visible.length){
+    ul.innerHTML = '<li class="empty"><strong>Nada pendiente</strong>Los chats aparecen cuando hay mensajes sin leer y desaparecen cuando ya no queda nada. Para escribir a alguien, envíale tu enlace con el botón de compartir o toca +.</li>';
+    return;
+  }
+  for (const c of visible){
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    const n = counts.get(c.id).in;
+    b.innerHTML = '<span class="avatar"></span><span class="cname"><span class="nm"></span><span class="csub"></span></span>';
+    b.querySelector('.avatar').textContent = c.name[0].toUpperCase();
+    b.querySelector('.nm').textContent = '@' + c.name;
+    b.querySelector('.csub').textContent = n ? 'Mensajes sin leer' : '';
+    if (n){ const s = document.createElement('span'); s.className = 'badge'; s.textContent = n; b.append(s); }
+    b.onclick = () => openChat(c.id, c.other);
+    li.append(b); ul.append(li);
+  }
+}
+
+/* ---------- añadir amigo ---------- */
+$('#addBtn').onclick = () => { $('#addErr').textContent = ''; $('#friendInput').value = ''; $('#addModal').classList.add('on'); $('#friendInput').focus(); };
+$('#friendInput').onkeydown = e => { if (e.key === 'Enter') $('#addGo').click(); };
+$('#addGo').onclick = async () => {
+  const name = $('#friendInput').value.trim().toLowerCase().replace(/^@/, '');
+  const err = $('#addErr');
+  err.textContent = '';
+  if (!name) return;
+  if (name === me.username){ err.textContent = 'Ese es tu propio usuario.'; return; }
+  const btn = $('#addGo'); btn.disabled = true;
+  try {
+    const s = await getDoc(doc(db, 'usernames', name));
+    if (!s.exists()){ err.textContent = 'No existe ningún usuario con ese nombre.'; return; }
+    $('#addModal').classList.remove('on');
+    await startChatWith(s.data().uid);
+  } catch (e){
+    err.textContent = rulesHint(e) || 'No se pudo abrir el chat. Inténtalo de nuevo.';
+  } finally { btn.disabled = false; }
+};
+
+async function startChatWith(other){
+  const members = [me.uid, other].sort();
+  const id = members.join('_');
+  await setDoc(doc(db, 'chats', id), { members, updatedAt: serverTimestamp() });
+  openChat(id, other);
+}
+
+/* ---------- enlace de invitación ---------- */
+async function fingerprint(jwk){
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(jwk.x + jwk.y)));
+  return [...h.slice(0, 8)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+$('#shareBtn').onclick = async () => {
+  const url = location.origin + location.pathname + '#add=' + me.uid + '.' + await fingerprint(me.publicJwk);
+  if (navigator.share){
+    try { await navigator.share({ title: 'PichiChat', text: 'Agrégame en PichiChat (@' + me.username + '):', url }); } catch {}
+  } else {
+    try { await navigator.clipboard.writeText(url); toast('Enlace copiado.'); }
+    catch { prompt('Copia tu enlace:', url); }
+  }
+};
+async function handleInvite(){
+  if (!me) return;
+  const m = location.hash.match(/^#add=([A-Za-z0-9]+)\.([0-9a-f]{16})$/);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  const [, uid, fp] = m;
+  if (uid === me.uid){ toast('Este es tu propio enlace. Envíaselo a un amigo.'); return; }
+  try {
+    const u = await getUser(uid);
+    if (!u || await fingerprint(u.pub) !== fp){ toast('Este enlace no es válido.'); return; }
+    await startChatWith(uid);
+  } catch (e){ toast(rulesHint(e) || 'No se pudo abrir el chat.'); }
+}
+window.addEventListener('hashchange', handleInvite);
+
+/* ---------- chat ---------- */
+let cur = null;
+
+async function openChat(id, other){
+  const u = await getUser(other);
+  if (!u){ toast('No se encontró a ese usuario.'); return; }
+  let key;
+  try { key = await chatKey(id, u.pub); } catch { toast('No se pudo preparar el cifrado.'); return; }
+  const c = { id, other, name: u.username, pub: u.pub, key, items: new Map(), seen: new Set() };
+  cur = c;
+  $('#chatName').textContent = '@' + u.username;
+  $('#msgs').innerHTML = '';
+  $('#text').value = '';
+  updateAction();
+  show('chat');
+  history.pushState({ chat: id }, '');
+
+  const col = collection(db, 'chats', id, 'messages');
+  c.unsubIn = onSnapshot(query(col, where('to', '==', me.uid)), snap => {
+    snap.docChanges().forEach(ch => { if (ch.type === 'added') receive(c, ch.doc); });
+  }, e => toast(rulesHint(e) || 'Error recibiendo mensajes.'));
+}
+
+function closeChat(){
+  if (!cur) return;
+  if (recorder) cancelRec();
+  cur.unsubIn && cur.unsubIn();
+  cur.unsubOut && cur.unsubOut();
+  for (const it of cur.items.values()) if (it.url) URL.revokeObjectURL(it.url);
+  if (!cur.deleted) cleanupChat(cur.id);
+  cur = null;
+  $('#msgs').innerHTML = '';
+  show('list');
+}
+$('#backBtn').onclick = () => history.back();
+
+async function pendingCount(id){
+  const col = collection(db, 'chats', id, 'messages');
+  const [a, b] = await Promise.all([
+    getDocs(query(col, where('to', '==', me.uid))),
+    getDocs(query(col, where('from', '==', me.uid)))
+  ]);
+  return a.size + b.size;
+}
+// Si no queda nada pendiente, el chat se borra del servidor
+async function cleanupChat(id){
+  try {
+    if (await pendingCount(id)) return;
+    const ref = doc(db, 'chats', id);
+    const snap = await getDoc(ref).catch(() => null);
+    if (!snap || !snap.exists()) return;
+    const members = snap.data().members;
+    await deleteDoc(ref);
+    // si justo llegó un mensaje mientras se borraba, se recupera el chat
+    if (await pendingCount(id)) await setDoc(ref, { members, updatedAt: serverTimestamp() });
+  } catch {}
+}
+
+$('#delBtn').onclick = async () => {
+  const c = cur;
+  if (!c) return;
+  if (!confirm('¿Borrar este chat? También se borrarán los mensajes que aún no se han leído.')) return;
+  const col = collection(db, 'chats', c.id, 'messages');
+  try {
+    const snaps = await Promise.all([
+      getDocs(query(col, where('to', '==', me.uid))),
+      getDocs(query(col, where('from', '==', me.uid)))
+    ]);
+    await Promise.all(snaps.flatMap(s => s.docs.map(d => deleteDoc(d.ref))));
+    await deleteDoc(doc(db, 'chats', c.id));
+    c.deleted = true;
+    if (cur === c) history.back();
+    toast('Chat borrado.');
+  } catch (e){ toast(rulesHint(e) || 'No se pudo borrar el chat.'); }
+};
+window.addEventListener('popstate', closeChat);
+
+async function decode(c, m){
+  const bytes = await unseal(c.key, m.iv, m.ct);
+  if (m.type === 'text') return { text: dec.decode(bytes) };
+  const url = URL.createObjectURL(new Blob([bytes], { type: m.mime || '' }));
+  return { url };
+}
+
+async function receive(c, d){
+  if (c.seen.has(d.id)) return;
+  c.seen.add(d.id);
+  const m = d.data({ serverTimestamps: 'estimate' });
+  const item = { id: d.id, mine: false, type: m.type, t: m.createdAt ? m.createdAt.toMillis() : Date.now() };
+  try { Object.assign(item, await decode(c, m)); } catch { item.type = 'bad'; }
+  if (cur !== c){ if (item.url) URL.revokeObjectURL(item.url); return; } // saliste antes de verlo: se queda sin leer
+  addItem(c, item);
+  deleteDoc(d.ref).catch(() => {});
+}
+
+async function outgoing(c, d){
+  if (c.seen.has(d.id)) return;
+  c.seen.add(d.id);
+  const m = d.data({ serverTimestamps: 'estimate' });
+  const item = { id: d.id, mine: true, type: m.type, t: m.createdAt ? m.createdAt.toMillis() : Date.now(),
+    status: d.metadata.hasPendingWrites ? 'Enviando…' : 'Enviado' };
+  try { Object.assign(item, await decode(c, m)); } catch { item.type = 'bad'; }
+  if (cur !== c){ if (item.url) URL.revokeObjectURL(item.url); return; }
+  addItem(c, item);
+  if (item.readEarly) markRead(c, item.id);
+}
+
+function setStatus(c, id, text){
+  const it = c.items.get(id);
+  if (!it) return;
+  it.status = text;
+  if (it.el) it.el.querySelector('.meta').textContent = text;
+}
+function markRead(c, id){
+  const it = c.items.get(id);
+  if (!it) return;
+  setStatus(c, id, 'Leído ✓');
+  it.el.classList.add('read');
+}
+
+function addItem(c, it){
+  c.items.set(it.id, it);
+  const wrap = document.createElement('div');
+  wrap.className = 'msg' + (it.mine ? ' mine' : '') + (it.type === 'bad' ? ' bad' : '');
+  wrap.dataset.t = it.t;
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  if (it.type === 'text') b.textContent = it.text;
+  else if (it.type === 'image'){
+    b.classList.add('media');
+    const img = document.createElement('img');
+    img.src = it.url; img.alt = 'Foto';
+    img.onclick = () => { $('#viewer img').src = it.url; $('#viewer').classList.add('on'); };
+    img.onload = () => scrollDown();
+    b.append(img);
+  } else if (it.type === 'audio'){
+    b.classList.add('media');
+    const a = document.createElement('audio');
+    a.controls = true; a.preload = 'metadata'; a.src = it.url;
+    b.append(a);
+  } else b.textContent = 'No se pudo descifrar este mensaje.';
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = it.mine ? it.status : new Date(it.t).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  wrap.append(b, meta);
+  it.el = wrap;
+  const box = $('#msgs');
+  const after = [...box.children].find(el => Number(el.dataset.t) > it.t);
+  box.insertBefore(wrap, after || null);
+  scrollDown();
+}
+function scrollDown(){ const box = $('#msgs'); box.scrollTop = box.scrollHeight; }
+
+/* ---------- enviar ---------- */
+async function send(type, bytes, mime){
+  const c = cur;
+  if (!c) return;
+  const { iv, ct } = await seal(c.key, bytes);
+  if (ct.length > MAX_BYTES){ toast('Es demasiado grande para enviarlo.'); return; }
+  const data = { from: me.uid, to: c.other, type, iv: Bytes.fromUint8Array(iv), ct: Bytes.fromUint8Array(ct), createdAt: serverTimestamp() };
+  if (mime) data.mime = mime;
+  if (type !== 'text') toast('Enviando…');
+  try {
+    await setDoc(doc(db, 'chats', c.id), { members: [me.uid, c.other].sort(), updatedAt: serverTimestamp() });
+    await addDoc(collection(db, 'chats', c.id, 'messages'), data);
+    toast('Enviado ✓');
+  } catch (e){ toast(rulesHint(e) || 'No se pudo enviar el mensaje.'); }
+}
+
+const textEl = $('#text');
+textEl.oninput = () => { textEl.style.height = 'auto'; textEl.style.height = Math.min(textEl.scrollHeight, 120) + 'px'; updateAction(); };
+textEl.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(pointer:coarse)').matches){ e.preventDefault(); $('#actionBtn').click(); } };
+
+const ICON_MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>';
+const ICON_SEND = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4l17.4-7.5c.8-.4.8-1.5 0-1.8L3.4 3.6c-.7-.3-1.4.4-1.1 1.1L5 11l8 1-8 1-2.7 6.3c-.3.7.4 1.4 1.1 1.1z"/></svg>';
+function updateAction(){
+  const btn = $('#actionBtn');
+  const sendMode = recorder || textEl.value.trim();
+  btn.innerHTML = sendMode ? ICON_SEND : ICON_MIC;
+  btn.setAttribute('aria-label', recorder ? 'Enviar audio' : sendMode ? 'Enviar' : 'Grabar audio');
+}
+
+$('#actionBtn').onclick = () => {
+  if (recorder){ recorder.stop(); return; }
+  const t = textEl.value.trim();
+  if (t){
+    textEl.value = ''; textEl.style.height = 'auto'; updateAction();
+    send('text', enc.encode(t));
+  } else startRec();
+};
+
+/* ---------- fotos ---------- */
+$('#photoBtn').onclick = () => $('#photoInput').click();
+$('#photoInput').onchange = async e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  try {
+    const blob = await compressImage(f);
+    send('image', new Uint8Array(await blob.arrayBuffer()), 'image/jpeg');
+  } catch { toast('No se pudo procesar la foto.'); }
+};
+async function loadImage(file){
+  try { return await createImageBitmap(file); }
+  catch {
+    const url = URL.createObjectURL(file);
+    try { const img = new Image(); img.src = url; await img.decode(); return img; }
+    finally { URL.revokeObjectURL(url); }
+  }
+}
+async function compressImage(file){
+  const src = await loadImage(file);
+  const w0 = src.width, h0 = src.height;
+  let max = 1600, q = 0.8, blob;
+  for (let i = 0; i < 7; i++){
+    const s = Math.min(1, max / Math.max(w0, h0));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(w0 * s); cv.height = Math.round(h0 * s);
+    cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
+    blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', q));
+    if (blob && blob.size <= 700000) break;
+    max = Math.round(max * 0.8); q = Math.max(0.5, q - 0.1);
+  }
+  return blob;
+}
+
+/* ---------- audio ---------- */
+let recorder = null, recChunks = [], recTimer = null, recCancelled = false;
+async function startRec(){
+  if (!window.MediaRecorder){ toast('Este navegador no permite grabar audio.'); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch { toast('Necesito permiso para usar el micrófono.'); return; }
+  const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find(t => MediaRecorder.isTypeSupported(t));
+  const opts = { audioBitsPerSecond: 32000 };
+  if (type) opts.mimeType = type;
+  const r = new MediaRecorder(stream, opts);
+  recorder = r; recChunks = []; recCancelled = false;
+  r.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
+  r.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    clearInterval(recTimer);
+    recorder = null;
+    setRecUI(false);
+    if (recCancelled) return;
+    const blob = new Blob(recChunks, { type: r.mimeType || type || 'audio/webm' });
+    if (blob.size < 800) return;
+    send('audio', new Uint8Array(await blob.arrayBuffer()), blob.type);
+  };
+  r.start(1000);
+  const start = Date.now();
+  setRecUI(true);
+  $('#recTime').textContent = '0:00';
+  recTimer = setInterval(() => {
+    const s = Math.floor((Date.now() - start) / 1000);
+    $('#recTime').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + ' / 1:00';
+    if (s >= MAX_AUDIO_S && r.state === 'recording') r.stop();
+  }, 250);
+}
+function cancelRec(){ if (!recorder) return; recCancelled = true; recorder.stop(); }
+function setRecUI(on){
+  $('#composer').classList.toggle('recording', on);
+  $('#cancelRecBtn').hidden = !on;
+  updateAction();
+}
+$('#cancelRecBtn').onclick = cancelRec;
+
+/* ---------- código de seguridad ---------- */
+$('#codeBtn').onclick = async () => {
+  if (!cur) return;
+  $('#codeText').textContent = 'Compara este código con @' + cur.name + ' en persona o por llamada. Si os sale el mismo, nadie más puede leer vuestros mensajes.';
+  $('#codeValue').textContent = await safetyCode(me.publicJwk, cur.pub);
+  $('#codeModal').classList.add('on');
+};
+</script>
+</body>
+</html>
