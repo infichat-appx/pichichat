@@ -17,6 +17,7 @@
 :root{
   --night:#171A33; --deep:#10122A; --surface:#232750; --line:#353A6B;
   --text:#F2F0FF; --muted:#9AA0C8; --lilac:#B9A7FF; --lilac-ink:#1E1640; --coral:#FF8A7A;
+  --sent:#2B7FE0; --sent-ink:#F2F8FF; --recv:#232750; --chatbg:#12142B;
   --display:"Bricolage Grotesque", ui-rounded, system-ui, sans-serif;
   --body:system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -62,20 +63,33 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 /* Chat */
 #chat .top{gap:6px;padding:10px 10px}
 #chatName{flex:1;font-weight:700;font-size:17px}
-.notice{text-align:center;font-size:12.5px;color:var(--muted);padding:10px 20px 4px}
-#msgs{flex:1;overflow-y:auto;padding:10px 12px 16px;display:flex;flex-direction:column;gap:6px}
-.msg{max-width:78%;display:flex;flex-direction:column;align-items:flex-start}
+.notice{text-align:center;font-size:12.5px;color:var(--muted);padding:10px 20px 4px;background:var(--chatbg)}
+#msgs{flex:1;overflow-y:auto;padding:12px 10px 14px;display:flex;flex-direction:column;gap:3px;background:var(--chatbg)}
+.msg{max-width:80%;display:flex;flex-direction:column;align-items:flex-start;margin-top:5px}
 .msg.mine{align-self:flex-end;align-items:flex-end}
-.bubble{background:var(--surface);border-radius:18px 18px 18px 6px;padding:9px 13px;white-space:pre-wrap;word-break:break-word}
-.mine .bubble{background:var(--lilac);color:var(--lilac-ink);border-radius:18px 18px 6px 18px}
-.bubble.media{padding:4px;overflow:hidden}
-.bubble img{display:block;max-width:100%;max-height:340px;border-radius:14px;cursor:zoom-in}
-.bubble audio{display:block;width:240px;max-width:100%}
-.meta{font-size:11.5px;color:var(--muted);margin:2px 6px 0}
+.bubble{position:relative;background:var(--recv);border-radius:16px 16px 16px 5px;padding:7px 11px 7px 12px;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 1px rgba(0,0,0,.18);animation:pop .18s ease}
+.mine .bubble{background:var(--sent);color:var(--sent-ink);border-radius:16px 16px 5px 16px}
+@keyframes pop{from{opacity:0;transform:translateY(6px) scale(.97)}to{opacity:1;transform:none}}
+.bubble .tail{padding-right:52px}
+.stamp{position:absolute;right:9px;bottom:5px;font-size:10.5px;line-height:1;color:var(--muted);display:flex;align-items:center;gap:3px;white-space:nowrap}
+.mine .stamp{color:rgba(242,248,255,.75)}
+.stamp .tick{width:15px;height:11px;display:inline-block}
+.bubble.media{padding:4px}
+.bubble.media .stamp{right:11px;bottom:9px;padding:2px 7px;background:rgba(0,0,0,.45);color:#fff;border-radius:10px}
+.bubble.media.tail{padding-right:4px}
+.bubble img{display:block;max-width:260px;width:100%;max-height:340px;object-fit:cover;border-radius:13px;cursor:zoom-in}
+.aud{display:flex;align-items:center;gap:10px;padding:4px 8px 4px 4px;min-width:210px}
+.aud button{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.16);display:grid;place-items:center;flex:none}
+.mine .aud button{background:rgba(255,255,255,.22)}
+.aud svg{width:20px;height:20px;color:#fff}
+.aud .wave{flex:1;height:22px;display:flex;align-items:center;gap:2px;overflow:hidden}
+.aud .wave i{flex:1;background:currentColor;opacity:.4;border-radius:2px;min-width:2px}
+.aud .wave i.on{opacity:.95}
+.aud .dur{font-size:11px;opacity:.8;font-variant-numeric:tabular-nums;flex:none}
 .msg.read .bubble{animation:vanish 1.6s ease forwards}
 @keyframes vanish{to{opacity:.35;filter:blur(3px)}}
 .msg.bad .bubble{background:transparent;border:1px dashed var(--coral);color:var(--coral)}
-@media (prefers-reduced-motion:reduce){.msg.read .bubble{animation:none;opacity:.4}}
+@media (prefers-reduced-motion:reduce){.msg.read .bubble{animation:none;opacity:.4}.bubble{animation:none}}
 
 .composer{display:flex;align-items:flex-end;gap:6px;padding:8px 8px;border-top:1px solid var(--line);background:var(--deep)}
 #text{flex:1;resize:none;background:var(--surface);border:0;color:var(--text);border-radius:20px;padding:10px 14px;font:16px/1.35 var(--body);max-height:120px;outline:none}
@@ -755,7 +769,7 @@ function setStatus(c, id, text){
   const it = c.items.get(id);
   if (!it) return;
   it.status = text;
-  if (it.el) it.el.querySelector('.meta').textContent = text;
+  if (it.stampEl){ const tk = it.stampEl.querySelector('.tick'); if (tk) tk.outerHTML = tickSvg(text === 'Leído ✓'); it.stampEl.firstChild.textContent = hhmm(it.t); }
 }
 function markRead(c, id){
   const it = c.items.get(id);
@@ -764,6 +778,40 @@ function markRead(c, id){
   it.el.classList.add('read');
 }
 
+const PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+const PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+function hhmm(t){ return new Date(t).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); }
+function tickSvg(read){
+  return '<svg class="tick" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">'
+    + '<path d="M2 9l4 4 8-10"/>' + (read ? '<path d="M9 13l2 2 8-10"/>' : '') + '</svg>';
+}
+function stampHtml(it){
+  let h = '<span class="stamp">' + hhmm(it.t);
+  if (it.mine) h += tickSvg(it.status === 'Leído ✓');
+  return h + '</span>';
+}
+function buildAudio(it){
+  const wrap = document.createElement('div');
+  wrap.className = 'aud';
+  const btn = document.createElement('button'); btn.innerHTML = PLAY; btn.setAttribute('aria-label', 'Reproducir');
+  const wave = document.createElement('div'); wave.className = 'wave';
+  const n = 22, bars = [];
+  for (let i = 0; i < n; i++){ const bar = document.createElement('i'); bar.style.height = (30 + Math.abs(Math.sin(i * 1.7)) * 70) + '%'; wave.append(bar); bars.push(bar); }
+  const dur = document.createElement('span'); dur.className = 'dur'; dur.textContent = '0:00';
+  const a = new Audio(it.url); a.preload = 'metadata';
+  const fmt = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+  a.onloadedmetadata = () => { if (isFinite(a.duration)) dur.textContent = fmt(a.duration); };
+  a.ontimeupdate = () => {
+    if (!isFinite(a.duration) || !a.duration) return;
+    const p = a.currentTime / a.duration;
+    bars.forEach((bar, i) => bar.classList.toggle('on', i / n <= p));
+    dur.textContent = fmt(a.duration - a.currentTime);
+  };
+  a.onended = () => { btn.innerHTML = PLAY; bars.forEach(b => b.classList.remove('on')); if (isFinite(a.duration)) dur.textContent = fmt(a.duration); };
+  btn.onclick = () => { if (a.paused){ btn.innerHTML = PAUSE; a.play(); } else { btn.innerHTML = PLAY; a.pause(); } };
+  wrap.append(btn, wave, dur);
+  return wrap;
+}
 function addItem(c, it){
   c.items.set(it.id, it);
   const wrap = document.createElement('div');
@@ -771,24 +819,26 @@ function addItem(c, it){
   wrap.dataset.t = it.t;
   const b = document.createElement('div');
   b.className = 'bubble';
-  if (it.type === 'text') b.textContent = it.text;
-  else if (it.type === 'image'){
-    b.classList.add('media');
+  if (it.type === 'text'){
+    b.classList.add('tail');
+    const span = document.createElement('span'); span.textContent = it.text;
+    b.append(span);
+    b.insertAdjacentHTML('beforeend', stampHtml(it));
+  } else if (it.type === 'image'){
+    b.classList.add('media', 'tail');
     const img = document.createElement('img');
     img.src = it.url; img.alt = 'Foto';
     img.onclick = () => { $('#viewer img').src = it.url; $('#viewer').classList.add('on'); };
     img.onload = () => scrollDown();
     b.append(img);
+    b.insertAdjacentHTML('beforeend', stampHtml(it));
   } else if (it.type === 'audio'){
     b.classList.add('media');
-    const a = document.createElement('audio');
-    a.controls = true; a.preload = 'metadata'; a.src = it.url;
-    b.append(a);
-  } else b.textContent = 'No se pudo descifrar este mensaje.';
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-  meta.textContent = it.mine ? it.status : new Date(it.t).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-  wrap.append(b, meta);
+    b.append(buildAudio(it));
+    b.insertAdjacentHTML('beforeend', '<span class="stamp">' + hhmm(it.t) + (it.mine ? tickSvg(it.status === 'Leído ✓') : '') + '</span>');
+  } else { b.classList.add('tail'); b.textContent = 'No se pudo descifrar este mensaje.'; }
+  it.stampEl = b.querySelector('.stamp');
+  wrap.append(b);
   it.el = wrap;
   const box = $('#msgs');
   const after = [...box.children].find(el => Number(el.dataset.t) > it.t);
