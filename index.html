@@ -117,6 +117,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   <header class="top">
     <div class="brand">Pichi<span>Chat</span></div>
     <span class="me" id="myName"></span>
+    <button class="iconbtn" id="shareBtn" aria-label="Compartir mi enlace">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>
+    </button>
     <button class="iconbtn fill" id="addBtn" aria-label="Añadir amigo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
     </button>
@@ -130,6 +133,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
     </button>
     <span id="chatName"></span>
+    <button class="iconbtn" id="delBtn" aria-label="Borrar chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>
+    </button>
     <button class="iconbtn" id="codeBtn" aria-label="Código de seguridad">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5" stroke-linecap="round"/></svg>
     </button>
@@ -176,7 +182,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, writeBatch, collection, query, where,
+import { getFirestore, doc, getDoc, getDocs, setDoc, writeBatch, collection, query, where,
   onSnapshot, addDoc, deleteDoc, serverTimestamp, Bytes } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -303,7 +309,7 @@ $('#nameInput').onkeydown = e => { if (e.key === 'Enter') $('#setupBtn').click()
 
 /* ---------- lista de chats ---------- */
 let chats = [];
-const unread = new Map();
+const counts = new Map();
 const unreadSubs = new Map();
 let listSub = null;
 
@@ -311,6 +317,7 @@ function startList(){
   show('list');
   $('#myName').textContent = '@' + me.username;
   renderList();
+  handleInvite();
   if (listSub) return;
   const q = query(collection(db, 'chats'), where('members', 'array-contains', me.uid));
   listSub = onSnapshot(q, async snap => {
@@ -321,33 +328,37 @@ function startList(){
       const u = await getUser(other);
       if (!u) continue;
       out.push({ id: d.id, other, name: u.username, t: data.updatedAt ? data.updatedAt.toMillis() : 0 });
-      watchUnread(d.id);
+      watchCounts(d.id);
     }
     chats = out.sort((a, b) => b.t - a.t);
     renderList();
   }, e => toast(rulesHint(e) || 'Error cargando los chats.'));
 }
-function watchUnread(chatId){
+function watchCounts(chatId){
   if (unreadSubs.has(chatId)) return;
-  const q = query(collection(db, 'chats', chatId, 'messages'), where('to', '==', me.uid));
-  unreadSubs.set(chatId, onSnapshot(q, s => { unread.set(chatId, s.size); renderList(); }, () => {}));
+  const col = collection(db, 'chats', chatId, 'messages');
+  const set = (k, n) => { const c = counts.get(chatId) || { in: 0, out: 0 }; c[k] = n; counts.set(chatId, c); renderList(); };
+  unreadSubs.set(chatId, [
+    onSnapshot(query(col, where('to', '==', me.uid)), s => set('in', s.size), () => {}),
+    onSnapshot(query(col, where('from', '==', me.uid)), s => set('out', s.size), () => {})
+  ]);
 }
 function renderList(){
   const ul = $('#chatList');
   ul.innerHTML = '';
-  if (!chats.length){
-    ul.innerHTML = '<li class="empty"><strong>Aún no hay chats</strong>Pulsa + y escribe el nombre de usuario de un amigo. Tu nombre es <b></b>, pásaselo para que te añada.</li>';
-    ul.querySelector('b').textContent = '@' + me.username;
+  const visible = chats.filter(c => { const n = counts.get(c.id); return n && n.in + n.out > 0; });
+  if (!visible.length){
+    ul.innerHTML = '<li class="empty"><strong>Nada pendiente</strong>Los chats aparecen cuando hay mensajes sin leer y desaparecen cuando ya no queda nada. Para escribir a alguien, envíale tu enlace con el botón de compartir o toca +.</li>';
     return;
   }
-  for (const c of chats){
+  for (const c of visible){
     const li = document.createElement('li');
     const b = document.createElement('button');
-    const n = unread.get(c.id) || 0;
+    const n = counts.get(c.id).in;
     b.innerHTML = '<span class="avatar"></span><span class="cname"><span class="nm"></span><span class="csub"></span></span>';
     b.querySelector('.avatar').textContent = c.name[0].toUpperCase();
     b.querySelector('.nm').textContent = '@' + c.name;
-    b.querySelector('.csub').textContent = n ? 'Mensajes sin leer' : 'Sin mensajes pendientes';
+    b.querySelector('.csub').textContent = n ? 'Mensajes sin leer' : 'Esperando a que lo lea';
     if (n){ const s = document.createElement('span'); s.className = 'badge'; s.textContent = n; b.append(s); }
     b.onclick = () => openChat(c.id, c.other);
     li.append(b); ul.append(li);
@@ -367,16 +378,48 @@ $('#addGo').onclick = async () => {
   try {
     const s = await getDoc(doc(db, 'usernames', name));
     if (!s.exists()){ err.textContent = 'No existe ningún usuario con ese nombre.'; return; }
-    const other = s.data().uid;
-    const members = [me.uid, other].sort();
-    const id = members.join('_');
-    await setDoc(doc(db, 'chats', id), { members, updatedAt: serverTimestamp() });
     $('#addModal').classList.remove('on');
-    openChat(id, other);
+    await startChatWith(s.data().uid);
   } catch (e){
     err.textContent = rulesHint(e) || 'No se pudo abrir el chat. Inténtalo de nuevo.';
   } finally { btn.disabled = false; }
 };
+
+async function startChatWith(other){
+  const members = [me.uid, other].sort();
+  const id = members.join('_');
+  await setDoc(doc(db, 'chats', id), { members, updatedAt: serverTimestamp() });
+  openChat(id, other);
+}
+
+/* ---------- enlace de invitación ---------- */
+async function fingerprint(jwk){
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(jwk.x + jwk.y)));
+  return [...h.slice(0, 8)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+$('#shareBtn').onclick = async () => {
+  const url = location.origin + location.pathname + '#add=' + me.uid + '.' + await fingerprint(me.publicJwk);
+  if (navigator.share){
+    try { await navigator.share({ title: 'PichiChat', text: 'Agrégame en PichiChat (@' + me.username + '):', url }); } catch {}
+  } else {
+    try { await navigator.clipboard.writeText(url); toast('Enlace copiado.'); }
+    catch { prompt('Copia tu enlace:', url); }
+  }
+};
+async function handleInvite(){
+  if (!me) return;
+  const m = location.hash.match(/^#add=([A-Za-z0-9]+)\.([0-9a-f]{16})$/);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  const [, uid, fp] = m;
+  if (uid === me.uid){ toast('Este es tu propio enlace. Envíaselo a un amigo.'); return; }
+  try {
+    const u = await getUser(uid);
+    if (!u || await fingerprint(u.pub) !== fp){ toast('Este enlace no es válido.'); return; }
+    await startChatWith(uid);
+  } catch (e){ toast(rulesHint(e) || 'No se pudo abrir el chat.'); }
+}
+window.addEventListener('hashchange', handleInvite);
 
 /* ---------- chat ---------- */
 let cur = null;
@@ -414,11 +457,52 @@ function closeChat(){
   cur.unsubIn && cur.unsubIn();
   cur.unsubOut && cur.unsubOut();
   for (const it of cur.items.values()) if (it.url) URL.revokeObjectURL(it.url);
+  if (!cur.deleted) cleanupChat(cur.id);
   cur = null;
   $('#msgs').innerHTML = '';
   show('list');
 }
 $('#backBtn').onclick = () => history.back();
+
+async function pendingCount(id){
+  const col = collection(db, 'chats', id, 'messages');
+  const [a, b] = await Promise.all([
+    getDocs(query(col, where('to', '==', me.uid))),
+    getDocs(query(col, where('from', '==', me.uid)))
+  ]);
+  return a.size + b.size;
+}
+// Si no queda nada pendiente, el chat se borra del servidor
+async function cleanupChat(id){
+  try {
+    if (await pendingCount(id)) return;
+    const ref = doc(db, 'chats', id);
+    const snap = await getDoc(ref).catch(() => null);
+    if (!snap || !snap.exists()) return;
+    const members = snap.data().members;
+    await deleteDoc(ref);
+    // si justo llegó un mensaje mientras se borraba, se recupera el chat
+    if (await pendingCount(id)) await setDoc(ref, { members, updatedAt: serverTimestamp() });
+  } catch {}
+}
+
+$('#delBtn').onclick = async () => {
+  const c = cur;
+  if (!c) return;
+  if (!confirm('¿Borrar este chat? También se borrarán los mensajes que aún no se han leído.')) return;
+  const col = collection(db, 'chats', c.id, 'messages');
+  try {
+    const snaps = await Promise.all([
+      getDocs(query(col, where('to', '==', me.uid))),
+      getDocs(query(col, where('from', '==', me.uid)))
+    ]);
+    await Promise.all(snaps.flatMap(s => s.docs.map(d => deleteDoc(d.ref))));
+    await deleteDoc(doc(db, 'chats', c.id));
+    c.deleted = true;
+    if (cur === c) history.back();
+    toast('Chat borrado.');
+  } catch (e){ toast(rulesHint(e) || 'No se pudo borrar el chat.'); }
+};
 window.addEventListener('popstate', closeChat);
 
 async function decode(c, m){
@@ -506,8 +590,8 @@ async function send(type, bytes, mime){
   const data = { from: me.uid, to: c.other, type, iv: Bytes.fromUint8Array(iv), ct: Bytes.fromUint8Array(ct), createdAt: serverTimestamp() };
   if (mime) data.mime = mime;
   try {
+    await setDoc(doc(db, 'chats', c.id), { members: [me.uid, c.other].sort(), updatedAt: serverTimestamp() });
     await addDoc(collection(db, 'chats', c.id, 'messages'), data);
-    updateDoc(doc(db, 'chats', c.id), { updatedAt: serverTimestamp() }).catch(() => {});
   } catch (e){ toast(rulesHint(e) || 'No se pudo enviar el mensaje.'); }
 }
 
