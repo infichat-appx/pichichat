@@ -96,6 +96,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 #viewer{position:fixed;inset:0;background:#000;display:none;align-items:center;justify-content:center;z-index:20}
 #viewer.on{display:flex}
 #viewer img{max-width:100%;max-height:100%}
+.linkbtn{color:var(--lilac);font-weight:600;margin-top:22px;text-align:left;padding:4px 0}
+.banner{display:block;width:100%;text-align:left;background:var(--surface);color:var(--text);padding:12px 16px;font-size:14px;border-bottom:1px solid var(--line)}
+.banner b{color:var(--lilac)}
+.me{cursor:pointer}
+.field + .field{margin-top:10px}
+.recode{font-family:var(--display);font-size:24px;font-weight:800;letter-spacing:.03em;text-align:center;padding:16px 8px;color:var(--lilac);word-break:break-all;user-select:all;-webkit-user-select:all}
 #toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--text);color:var(--deep);padding:10px 16px;border-radius:12px;font-size:14px;display:none;z-index:30;max-width:90vw;text-align:center}
 #toast.on{display:block}
 </style>
@@ -110,13 +116,24 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   <div class="field"><b>@</b><input id="nameInput" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="tu_nombre"></div>
   <div class="err" id="setupErr"></div>
   <button class="primary" id="setupBtn">Crear mi usuario</button>
-  <p class="hint">Letras, números y guion bajo (3 a 20). Si vas a añadir la app a la pantalla de inicio, hazlo antes de crear tu usuario: tu identidad se queda guardada solo en este dispositivo.</p>
+  <p class="hint">Letras, números y guion bajo (3 a 20). Si vas a añadir la app a la pantalla de inicio, hazlo antes de crear tu usuario.</p>
+  <button class="linkbtn" id="toRecover">¿Ya tenías usuario? Recupéralo</button>
+</section>
+
+<section id="recover" class="screen">
+  <div class="brand">Recuperar</div>
+  <p style="color:var(--muted);margin:14px 0 24px;max-width:32ch">Escribe tu nombre de usuario y tu código de recuperación.</p>
+  <div class="field"><b>@</b><input id="recName" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="tu_nombre"></div>
+  <div class="field"><input id="recCode" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"></div>
+  <div class="err" id="recErr"></div>
+  <button class="primary" id="recBtn">Recuperar mi usuario</button>
+  <button class="linkbtn" id="toSetup">Crear un usuario nuevo</button>
 </section>
 
 <section id="list" class="screen">
   <header class="top">
     <div class="brand">Pichi<span>Chat</span></div>
-    <span class="me" id="myName"></span>
+    <button class="me" id="myName" aria-label="Mi usuario y código de recuperación"></button>
     <button class="iconbtn" id="shareBtn" aria-label="Compartir mi enlace">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>
     </button>
@@ -124,6 +141,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
     </button>
   </header>
+  <button class="banner" id="backupBanner" hidden>Protege tu usuario: <b>crea tu código de recuperación</b> por si cambias de móvil.</button>
   <ul id="chatList"></ul>
 </section>
 
@@ -176,13 +194,25 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   </div>
 </div>
 
+<div class="modal" id="backupModal">
+  <div class="sheet">
+    <h2>Código de recuperación</h2>
+    <p id="backupText"></p>
+    <div class="recode" id="backupCode" hidden></div>
+    <div class="err" id="backupErr"></div>
+    <button class="primary" id="backupGo">Crear código</button>
+    <button class="ghost" data-close>Cerrar</button>
+  </div>
+</div>
+
 <div id="viewer"><img alt=""></div>
 <div id="toast"></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, getDoc, getDocs, setDoc, writeBatch, collection, query, where,
+import { getAuth, signInAnonymously, onAuthStateChanged, EmailAuthProvider, linkWithCredential,
+  signInWithEmailAndPassword, updatePassword, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, collection, query, where,
   onSnapshot, addDoc, deleteDoc, serverTimestamp, Bytes } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -223,7 +253,7 @@ async function kvSet(k, v){ const d = await idb(); return new Promise((res, rej)
 
 /* ---------- cifrado ---------- */
 async function genKeys(){
-  const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+  const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   const j = await crypto.subtle.exportKey('jwk', kp.publicKey);
   return { privateKey: kp.privateKey, publicJwk: { kty: j.kty, crv: j.crv, x: j.x, y: j.y } };
 }
@@ -254,6 +284,127 @@ async function safetyCode(a, b){
   for (let i = 0; i < 5; i++) parts.push(String(((h[i * 2] << 8) | h[i * 2 + 1]) % 10000).padStart(4, '0'));
   return parts.join(' ');
 }
+
+/* ---------- código de recuperación ---------- */
+const CODE_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const emailFor = u => u + '@pichichat.firebaseapp.com';
+function genCode(){
+  const r = crypto.getRandomValues(new Uint8Array(20));
+  let s = '';
+  for (let i = 0; i < 20; i++){ s += CODE_ABC[r[i] & 31]; if (i % 4 === 3 && i < 19) s += '-'; }
+  return s;
+}
+// Del código salen dos secretos: la contraseña que ve Firebase y la llave de tu caja fuerte (que nunca sale del móvil)
+async function codeSecrets(username, code){
+  const norm = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const base = await crypto.subtle.importKey('raw', enc.encode(norm), 'PBKDF2', false, ['deriveBits']);
+  const bits = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode('pichichat-recovery:' + username), iterations: 150000 }, base, 512));
+  const password = [...bits.slice(0, 32)].map(b => b.toString(16).padStart(2, '0')).join('');
+  const vaultKey = await crypto.subtle.importKey('raw', bits.slice(32), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  return { password, vaultKey };
+}
+function authMsg(e){
+  const c = e && e.code || '';
+  if (c === 'auth/operation-not-allowed') return 'Falta activar "Correo electrónico/contraseña" en Firebase Authentication.';
+  if (c === 'auth/invalid-credential' || c === 'auth/wrong-password' || c === 'auth/user-not-found' || c === 'auth/invalid-login-credentials') return 'Usuario o código incorrecto.';
+  if (c === 'auth/too-many-requests') return 'Demasiados intentos. Espera unos minutos.';
+  if (c === 'auth/network-request-failed') return 'Sin conexión. Inténtalo de nuevo.';
+  return rulesHint(e);
+}
+
+async function createBackup(){
+  let jwkPriv;
+  try { jwkPriv = await crypto.subtle.exportKey('jwk', me.privateKey); }
+  catch {
+    // usuarios antiguos: su clave no se podía copiar, así que se crea una nueva
+    const keys = await genKeys();
+    await updateDoc(doc(db, 'users', me.uid), { publicKey: JSON.stringify(keys.publicJwk) });
+    me.privateKey = keys.privateKey; me.publicJwk = keys.publicJwk;
+    keyCache.clear();
+    await kvSet('me', me);
+    jwkPriv = await crypto.subtle.exportKey('jwk', me.privateKey);
+  }
+  const code = genCode();
+  const { password, vaultKey } = await codeSecrets(me.username, code);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, vaultKey, enc.encode(JSON.stringify(jwkPriv))));
+  const user = auth.currentUser;
+  const email = emailFor(me.username);
+  if (user.isAnonymous){
+    await linkWithCredential(user, EmailAuthProvider.credential(email, password));
+  } else {
+    try { await updatePassword(user, password); }
+    catch (e){
+      if (e.code !== 'auth/requires-recent-login') throw e;
+      const old = prompt('Por seguridad, escribe tu código de recuperación anterior:');
+      if (!old) throw e;
+      const o = await codeSecrets(me.username, old);
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(email, o.password));
+      await updatePassword(user, password);
+    }
+  }
+  await setDoc(doc(db, 'vault', me.uid), { iv: Bytes.fromUint8Array(iv), ct: Bytes.fromUint8Array(ct) });
+  me.backedUp = true;
+  await kvSet('me', me);
+  return code;
+}
+
+async function recoverUser(name, code){
+  const { password, vaultKey } = await codeSecrets(name, code);
+  const cred = await signInWithEmailAndPassword(auth, emailFor(name), password);
+  const uid = cred.user.uid;
+  const [u, v] = await Promise.all([getDoc(doc(db, 'users', uid)), getDoc(doc(db, 'vault', uid))]);
+  if (!u.exists() || !v.exists()) throw new Error('novault');
+  const d = v.data();
+  const raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: d.iv.toUint8Array() }, vaultKey, d.ct.toUint8Array());
+  const jwk = JSON.parse(dec.decode(raw));
+  const privateKey = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  me = { uid, username: u.data().username, privateKey, publicJwk: JSON.parse(u.data().publicKey), backedUp: true };
+  await kvSet('me', me);
+}
+
+$('#toRecover').onclick = () => { show('recover'); $('#recName').focus(); };
+$('#toSetup').onclick = () => show('setup');
+$('#recBtn').onclick = async () => {
+  const name = $('#recName').value.trim().toLowerCase().replace(/^@/, '');
+  const code = $('#recCode').value;
+  const err = $('#recErr');
+  err.textContent = '';
+  if (!/^[a-z0-9_]{3,20}$/.test(name) || code.replace(/[^A-Za-z0-9]/g, '').length !== 20){ err.textContent = 'Revisa el nombre y el código (20 caracteres).'; return; }
+  const btn = $('#recBtn'); btn.disabled = true; btn.textContent = 'Recuperando…';
+  try { await recoverUser(name, code); startList(); }
+  catch (e){ err.textContent = authMsg(e) || 'No se pudo recuperar. Revisa el código.'; }
+  finally { btn.disabled = false; btn.textContent = 'Recuperar mi usuario'; }
+};
+
+function openBackup(){
+  $('#backupErr').textContent = '';
+  $('#backupCode').hidden = true;
+  $('#backupGo').hidden = false;
+  $('#backupText').textContent = me.backedUp
+    ? 'Ya tienes un código de recuperación. Si lo has perdido, crea uno nuevo: el anterior dejará de valer.'
+    : 'Con tu nombre (@' + me.username + ') y este código podrás recuperar tu usuario en otro móvil o navegador. Anótalo fuera del móvil: quien lo tenga puede entrar como tú.';
+  $('#backupGo').textContent = me.backedUp ? 'Crear código nuevo' : 'Crear código';
+  $('#backupModal').classList.add('on');
+}
+$('#myName').onclick = openBackup;
+$('#backupBanner').onclick = openBackup;
+$('#backupGo').onclick = async () => {
+  const btn = $('#backupGo'); btn.disabled = true; btn.textContent = 'Creando…';
+  $('#backupErr').textContent = '';
+  try {
+    const code = await createBackup();
+    $('#backupText').textContent = 'Anótalo ahora: no se volverá a mostrar. Para recuperar tu usuario necesitarás @' + me.username + ' y este código.';
+    $('#backupCode').textContent = code;
+    $('#backupCode').hidden = false;
+    btn.hidden = true;
+    $('#backupBanner').hidden = true;
+  } catch (e){
+    $('#backupErr').textContent = authMsg(e) || 'No se pudo crear el código. Inténtalo de nuevo.';
+    btn.textContent = me.backedUp ? 'Crear código nuevo' : 'Crear código';
+  } finally { btn.disabled = false; }
+};
 
 /* ---------- usuarios ---------- */
 let me = null;
@@ -316,6 +467,7 @@ let listSub = null;
 function startList(){
   show('list');
   $('#myName').textContent = '@' + me.username;
+  $('#backupBanner').hidden = !!me.backedUp;
   renderList();
   handleInvite();
   if (listSub) return;
