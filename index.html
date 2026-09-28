@@ -513,6 +513,7 @@ $('#logoutBtn').onclick = async () => {
     await kvDel('me');
     await kvDel('hidden');
     await kvDel('blocked');
+    await kvDel('lastSent');
     await signOut(auth);
   } catch {}
   location.replace(location.pathname);
@@ -545,6 +546,8 @@ onAuthStateChanged(auth, async user => {
     me = saved;
     hiddenChats = new Set((await kvGet('hidden').catch(() => null)) || []);
     blocked = new Set((await kvGet('blocked').catch(() => null)) || []);
+    lastSent = (await kvGet('lastSent').catch(() => null)) || {};
+    for (const k of Object.keys(lastSent)) if (typeof lastSent[k] === 'number') lastSent[k] = { t: lastSent[k] };
     startList();
   }
   else goStart();
@@ -586,6 +589,10 @@ const counts = new Map();
 let hiddenChats = new Set();
 let blocked = new Set();
 function saveBlocked(){ kvSet('blocked', [...blocked]).catch(() => {}); }
+const GRACE_MS = 3 * 60 * 1000;   // el chat se queda 3 min desde tu último envío
+let lastSent = {};
+function saveLastSent(){ kvSet('lastSent', lastSent).catch(() => {}); }
+let graceTimer = null;
 function saveHidden(){ kvSet('hidden', [...hiddenChats]).catch(() => {}); }
 const unreadSubs = new Map();
 let listSub = null;
@@ -632,9 +639,21 @@ function avatarColor(name){
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 function renderList(){
+  if (!graceTimer) graceTimer = setInterval(() => { if ($('#list').classList.contains('on')) renderList(); }, 20000);
   const ul = $('#chatList');
   ul.innerHTML = '';
-  const visible = chats.filter(c => { if (blocked.has(c.other)) return false; const n = counts.get(c.id); return n && (n.in > 0 || (n.out > 0 && !hiddenChats.has(c.id))); });
+  const now = Date.now();
+  const all = new Map(chats.map(c => [c.id, c]));
+  for (const [id, v] of Object.entries(lastSent)){          // chats recientes tuyos, aunque ya no existan en el servidor
+    if (!all.has(id) && v.other && v.name && now - v.t < GRACE_MS) all.set(id, { id, other: v.other, name: v.name, t: v.t });
+  }
+  const visible = [...all.values()].filter(c => {
+    if (blocked.has(c.other)) return false;
+    const n = counts.get(c.id) || { in: 0, out: 0 };
+    if (n.in > 0) return true;                               // te escribió: se ve hasta que lo leas, sin límite de tiempo
+    const ls = lastSent[c.id];
+    return !!ls && !hiddenChats.has(c.id) && (now - ls.t) < GRACE_MS;   // tú escribiste hace menos de 3 min
+  });
   if (!visible.length){
     ul.innerHTML = '<li class="empty"><strong>No hay chats</strong>Comparte tu enlace o toca + para escribir a alguien.</li>';
     return;
@@ -642,7 +661,7 @@ function renderList(){
   for (const c of visible){
     const li = document.createElement('li');
     const b = document.createElement('button');
-    const n = counts.get(c.id).in;
+    const n = (counts.get(c.id) || { in: 0 }).in;
     b.innerHTML = '<span class="avatar"></span><span class="cname"><span class="nm"></span><span class="csub"></span></span>';
     const av = b.querySelector('.avatar');
     av.textContent = c.name[0].toUpperCase();
@@ -820,6 +839,7 @@ $('#panicBtn').onclick = async () => {
     await Promise.all(snaps.flatMap(s => s.docs.map(d => deleteDoc(d.ref))));
     await deleteDoc(doc(db, 'chats', c.id));
     c.deleted = true;
+    delete lastSent[c.id]; saveLastSent();
     if (cur === c) history.back();
     toast('Chat borrado.');
   } catch (e){ toast(rulesHint(e) || 'No se pudo borrar el chat.'); }
@@ -967,6 +987,9 @@ async function send(type, bytes, mime){
   if (mime) data.mime = mime;
   if (type !== 'text') toast('Enviando…');
   if (hiddenChats.delete(c.id)) saveHidden();
+  lastSent[c.id] = { t: Date.now(), other: c.other, name: c.name };
+  for (const k of Object.keys(lastSent)) if (Date.now() - lastSent[k].t > 3600000) delete lastSent[k];
+  saveLastSent();
   try {
     await setDoc(doc(db, 'chats', c.id), { members: [me.uid, c.other].sort(), updatedAt: serverTimestamp() });
     await addDoc(collection(db, 'chats', c.id, 'messages'), data);
